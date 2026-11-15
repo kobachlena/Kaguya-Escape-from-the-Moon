@@ -1,6 +1,7 @@
 using UnityEngine;
 using TMPro;
 using System.Collections;
+using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
@@ -66,12 +67,13 @@ public class GameManager : MonoBehaviour, IRestartable
         pausePanel.SetActive(false);
         countDown.SetActive(false);
         scorePanel.SetActive(false);
-        pauseButton.SetActive(false);
+        pauseButton.SetActive(true);
         tapPanel.SetActive(true);
     }
 
     void Start()
     {
+        AudioManager.Instance.PlayMusic(gameMusic);
         TapToContinue();
     }
     
@@ -105,22 +107,24 @@ public class GameManager : MonoBehaviour, IRestartable
     
     public void Pause()
     {
-        if (CurrentState != GameState.Playing)
-            return;
-        Time.timeScale = 0f;
-        player.enabled = false;
-        CurrentState = GameState.Paused;
-        scorePanel.SetActive(false);
-        pauseButton.SetActive(false);
-        AudioManager.Instance.PlayEffect(uiClip);
-        pausePanel.SetActive(true);
+        if (CurrentState == GameState.Playing || CurrentState == GameState.Countdown)
+        {
+            tapPanel.SetActive(false);
+            Time.timeScale = 0f;
+            player.enabled = false;
+            CurrentState = GameState.Paused;
+            scorePanel.SetActive(false);
+            pauseButton.SetActive(false);
+            AudioManager.Instance.PlayEffect(uiClip);
+            pausePanel.SetActive(true);
+        }
     }
 
     public void Resume()
     {
         if (CurrentState != GameState.Paused)
             return;
-        BeginCountdown();
+        TapToContinue();
     }
 
    
@@ -151,6 +155,7 @@ public class GameManager : MonoBehaviour, IRestartable
         restartPanel.SetActive(false);
 
         TapToContinue();
+        AudioManager.Instance.PlayMusic(gameMusic);
     }
 
     public void Quit()
@@ -160,6 +165,8 @@ public class GameManager : MonoBehaviour, IRestartable
         #else
             Application.Quit();
         #endif
+        
+        PlayerPrefs.Save();
     }
 
     private void BeginCountdown()
@@ -193,7 +200,8 @@ public class GameManager : MonoBehaviour, IRestartable
     private void TapToContinue()
     {
         scorePanel.SetActive(false);
-        pauseButton.SetActive(false);
+        pausePanel.SetActive(false);
+        pauseButton.SetActive(true);
         tapPanel.SetActive(true);
         Time.timeScale = 0f;
         player.enabled = false;
@@ -203,20 +211,23 @@ public class GameManager : MonoBehaviour, IRestartable
             StopCoroutine(waitForTapCoroutine);
         
         waitForTapCoroutine = StartCoroutine(WaitForTap());
-
     }
 
     private IEnumerator WaitForTap()
     {
-        yield return null;
-        
-        AudioManager.Instance.PlayMusic(gameMusic);
-        
-        while (!touchAction.action.WasPressedThisFrame())
+        while (true)
         {
+            if (touchAction.action.WasPressedThisFrame())
+            {
+                bool overUI = EventSystem.current.IsPointerOverGameObject();
+
+                if (!overUI)
+                    break;
+            }
+            
             yield return null;
         }
-
+        
         waitForTapCoroutine = null;
         tapPanel.SetActive(false);
         scorePanel.SetActive(true);

@@ -3,8 +3,6 @@ using UnityEngine;
 
 public class Score : MonoBehaviour
 {
-    public const string BestScoreKey = "BestScore";
-    
     [SerializeField] private TMP_Text scoreText;
     [SerializeField] private TMP_Text bestScoreText;
     [SerializeField] private PlayerMovement player;
@@ -13,7 +11,7 @@ public class Score : MonoBehaviour
 
     void Start()
     {
-        bestScoreValue = PlayerPrefs.GetInt(BestScoreKey, 0);
+        bestScoreValue = SaveSystem.Instance.GetBestScore();
         bestScoreText.text = "Best Score:\n" + bestScoreValue.ToString();
         displayedScore = -1;
     }
@@ -37,8 +35,7 @@ public class Score : MonoBehaviour
 
         bestScoreValue = currentScore;
 
-        PlayerPrefs.SetInt(BestScoreKey, bestScoreValue);
-        PlayerPrefs.Save();
+        SaveSystem.Instance.SaveBestScore(bestScoreValue);
 
         bestScoreText.text =
             "Best Score:\n" + bestScoreValue;
