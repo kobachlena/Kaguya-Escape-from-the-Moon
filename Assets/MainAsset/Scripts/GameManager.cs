@@ -28,9 +28,10 @@ public class GameManager : MonoBehaviour, IRestartable
     [SerializeField] private GameObject pausePanel;
     [SerializeField] private GameObject pauseButton;
     [SerializeField] private GameObject scorePanel;
-    [SerializeField] private TMP_Text countDownText;
-    [SerializeField] GameObject countDown;
     [SerializeField] private GameObject tapPanel;
+    [SerializeField] private GameObject shopButton;
+    [SerializeField] private GameObject shopPanel;
+    
     
     [SerializeField] private int countDownValue = 3;
     private Coroutine countdownCoroutine;
@@ -65,9 +66,11 @@ public class GameManager : MonoBehaviour, IRestartable
         
         restartPanel.SetActive(false);
         pausePanel.SetActive(false);
-        countDown.SetActive(false);
+        //countDown.SetActive(false);
         scorePanel.SetActive(false);
         pauseButton.SetActive(true);
+        shopButton.SetActive(true);
+        shopPanel.SetActive(false);
         tapPanel.SetActive(true);
     }
 
@@ -80,29 +83,29 @@ public class GameManager : MonoBehaviour, IRestartable
     void OnEnable(){touchAction.action.Enable();}
     void OnDisable(){touchAction.action.Disable();}
 
-    IEnumerator CountDown()
-    {
-        pausePanel.SetActive(false);
-        countDown.SetActive(true);
-        int countDownv = countDownValue;
-        
-        while (countDownv >= 0)
-        {
-            if(countDownv==0)
-                countDownText.text = "GO!";
-            else
-             countDownText.text = countDownv.ToString();
-            yield return new WaitForSecondsRealtime(0.7f);
-            countDownv--;
-        }
-        countDown.SetActive(false);
-        scorePanel.SetActive(true);
-        pauseButton.SetActive(true);
-        player.enabled = true;
-        Time.timeScale = 1f;
-        CurrentState = GameState.Playing;
-        countdownCoroutine = null;
-    }
+    // IEnumerator CountDown()
+    // {
+    //     pausePanel.SetActive(false);
+    //     countDown.SetActive(true);
+    //     int countDownv = countDownValue;
+    //     
+    //     while (countDownv >= 0)
+    //     {
+    //         if(countDownv==0)
+    //             countDownText.text = "GO!";
+    //         else
+    //          countDownText.text = countDownv.ToString();
+    //         yield return new WaitForSecondsRealtime(0.7f);
+    //         countDownv--;
+    //     }
+    //     countDown.SetActive(false);
+    //     scorePanel.SetActive(true);
+    //     pauseButton.SetActive(true);
+    //     player.enabled = true;
+    //     Time.timeScale = 1f;
+    //     CurrentState = GameState.Playing;
+    //     countdownCoroutine = null;
+    // }
     
     
     public void Pause()
@@ -110,12 +113,12 @@ public class GameManager : MonoBehaviour, IRestartable
         if (CurrentState == GameState.Playing || CurrentState == GameState.Countdown)
         {
             tapPanel.SetActive(false);
+            shopButton.SetActive(false);
             Time.timeScale = 0f;
             player.enabled = false;
             CurrentState = GameState.Paused;
             scorePanel.SetActive(false);
             pauseButton.SetActive(false);
-            AudioManager.Instance.PlayEffect(uiClip);
             pausePanel.SetActive(true);
         }
     }
@@ -138,6 +141,7 @@ public class GameManager : MonoBehaviour, IRestartable
         restartText.text = "Score:\n" + player.GetDistance().ToString();
         scorePanel.SetActive(false);
         pauseButton.SetActive(false);
+        shopButton.SetActive(false);
         AudioManager.Instance.PlayEffect(explosionClip);
         AudioManager.Instance.StopMusic();
         StartCoroutine(SetExplosion());
@@ -169,17 +173,17 @@ public class GameManager : MonoBehaviour, IRestartable
         PlayerPrefs.Save();
     }
 
-    private void BeginCountdown()
-    {
-        if (countdownCoroutine != null)
-            StopCoroutine(countdownCoroutine);
-        
-        Time.timeScale = 0f;
-        player.enabled = false;
-        CurrentState = GameState.Countdown;
-
-        countdownCoroutine = StartCoroutine(CountDown());
-    }
+    // private void BeginCountdown()
+    // {
+    //     if (countdownCoroutine != null)
+    //         StopCoroutine(countdownCoroutine);
+    //     
+    //     Time.timeScale = 0f;
+    //     player.enabled = false;
+    //     CurrentState = GameState.Countdown;
+    //
+    //     countdownCoroutine = StartCoroutine(CountDown());
+    // }
 
     IEnumerator SetExplosion()
     {
@@ -201,7 +205,9 @@ public class GameManager : MonoBehaviour, IRestartable
     {
         scorePanel.SetActive(false);
         pausePanel.SetActive(false);
+        shopPanel.SetActive(false);
         pauseButton.SetActive(true);
+        shopButton.SetActive(true);
         tapPanel.SetActive(true);
         Time.timeScale = 0f;
         player.enabled = false;
@@ -235,5 +241,19 @@ public class GameManager : MonoBehaviour, IRestartable
         Time.timeScale = 1f;
         player.enabled = true;
         CurrentState = GameState.Playing;
+    }
+
+
+    public void Shop()
+    {
+        shopButton.SetActive(false);
+        pauseButton.SetActive(false);
+        tapPanel.SetActive(false);
+        shopPanel.SetActive(true);
+        Time.timeScale = 0f;
+        player.enabled = false;
+        CurrentState = GameState.Paused;
+        scorePanel.SetActive(false);
+        pauseButton.SetActive(false);
     }
 }

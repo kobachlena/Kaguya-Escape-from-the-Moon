@@ -1,15 +1,13 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 using System.Collections;
-
+using UnityEngine.EventSystems;
 using Vector2 = UnityEngine.Vector2;
 using Vector3 = UnityEngine.Vector3;
 
 public class PlayerMovement : MonoBehaviour, IRestartable
 {
     [Header("PlayerProperties")] private Vector3 movement;
-    [SerializeField] GameObject playerModel;
-    [SerializeField] GameObject crouchModel;
     private bool isGrounded = true;
     private bool isCrouching = false;
 
@@ -17,7 +15,12 @@ public class PlayerMovement : MonoBehaviour, IRestartable
     private float yMovement;
     private float zMovement;
     private CharacterController playerController;
+    
+    [Header("Player Skins")] 
+    [SerializeField] GameObject[]  playerModel  = new GameObject[3];
 
+    [SerializeField] private GameObject[] crouchModel = new GameObject[3];
+    
     [Header("Speed")] [Min(0f)] [SerializeField]
     private float startSpeed = 10f;
 
@@ -49,8 +52,8 @@ public class PlayerMovement : MonoBehaviour, IRestartable
     private Vector2 startTouchPosition;
     private bool pointerHeld;
 
-    [Header("StartPoint")] [SerializeField]
-    private Transform playerStartPoint;
+    [Header("StartPoint")]
+    [SerializeField] private Transform playerStartPoint;
 
     [Header("Audio")] 
     [SerializeField] private AudioClip jumpClip;
@@ -94,8 +97,11 @@ public class PlayerMovement : MonoBehaviour, IRestartable
         currentSpeed = startSpeed;
         playerController.height = 2f;
         playerController.center = new Vector3(0f, 0f, 0f);
-        playerModel.SetActive(true);
-        crouchModel.SetActive(false);
+        for (int i = 0; i < playerModel.Length; i++)
+        {
+            playerModel[i].SetActive(i==SaveSystem.Instance.GetPlayableSkin());
+            crouchModel[i].SetActive(false);
+        }
         wasGrounded = true;
     }
 
@@ -210,15 +216,18 @@ public class PlayerMovement : MonoBehaviour, IRestartable
             AudioManager.Instance.PlayEffect(crouchClip);
         }
 
-        if (pressedNow)
+        if (pressedNow  && !EventSystem.current.IsPointerOverGameObject())
         {
             isCrouching = true;
 
             playerController.height = 1f;
             playerController.center = new Vector3(0f, -0.5f, 0f);
 
-            playerModel.SetActive(false);
-            crouchModel.SetActive(true);
+            for (int i = 0; i < playerModel.Length; i++)
+            {
+                playerModel[i].SetActive(false);
+                crouchModel[i].SetActive(i==SaveSystem.Instance.GetPlayableSkin());
+            }
 
             verticalVelocity = -30f;
         }
@@ -229,8 +238,11 @@ public class PlayerMovement : MonoBehaviour, IRestartable
             playerController.height = 2f;
             playerController.center = Vector3.zero;
 
-            playerModel.SetActive(true);
-            crouchModel.SetActive(false);
+            for (int i = 0; i < playerModel.Length; i++)
+            {
+                playerModel[i].SetActive(i==SaveSystem.Instance.GetPlayableSkin());
+                crouchModel[i].SetActive(false);
+            }
         }
 
         if (pointerHeld &&
@@ -249,8 +261,11 @@ public class PlayerMovement : MonoBehaviour, IRestartable
 
     public void GameOver()
     {
-        crouchModel.SetActive(false);
-        playerModel.SetActive(false);
+        for (int i = 0; i < playerModel.Length; i++)
+        {
+            playerModel[i].SetActive(false);
+            crouchModel[i].SetActive(false);
+        }
     }
     
     public void Restart()
@@ -268,8 +283,11 @@ public class PlayerMovement : MonoBehaviour, IRestartable
         verticalVelocity = 0f;
         playerController.height = 2f;
         playerController.center = new Vector3(0f, 0f, 0f);
-        playerModel.SetActive(true);
-        crouchModel.SetActive(false);
+        for (int i = 0; i < playerModel.Length; i++)
+        {
+            playerModel[i].SetActive(i==SaveSystem.Instance.GetPlayableSkin());
+            crouchModel[i].SetActive(false);
+        }
         wasGrounded = true;
 
         xMovement = 0f;
@@ -286,6 +304,16 @@ public class PlayerMovement : MonoBehaviour, IRestartable
     {
         return (int)(transform.position.z - playerStartPoint.position.z);
     }
+
+    public void Play()
+    {
+        for (int i = 0; i < playerModel.Length; i++)
+        {
+            playerModel[i].SetActive(i==SaveSystem.Instance.GetPlayableSkin());
+            crouchModel[i].SetActive(false);
+        }
+    }
+    
 }
 
    

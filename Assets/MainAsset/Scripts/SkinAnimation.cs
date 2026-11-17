@@ -3,8 +3,9 @@ using UnityEngine;
 public class SkinAnimation : MonoBehaviour
 {
 
-    [SerializeField] private Vector3 startPosition;
-    [SerializeField] private Vector3 endPosition;
+    [SerializeField] private Transform rightPosition;
+    [SerializeField] private Transform leftPosition;
+    [SerializeField] private Transform centralPosition;
     [SerializeField] private float animationSpeed;
 
     private float swipeDirection;
@@ -14,13 +15,13 @@ public class SkinAnimation : MonoBehaviour
         swipeDirection = GetComponentInParent<SkinSelection>().GetDeltaX();
         
         if(swipeDirection >= 0)
-            transform.position = startPosition;
+            transform.position = leftPosition.position;
         else
-            transform.position = new Vector3(-startPosition.x, startPosition.y, startPosition.z);
+            transform.position = rightPosition.position;
     }
     
     void Update()
     {
-        transform.position = Vector3.Lerp(transform.position, endPosition, animationSpeed * Time.deltaTime);
+        transform.position = Vector3.Lerp(transform.position, centralPosition.position, animationSpeed * Time.unscaledDeltaTime);
     }
 }

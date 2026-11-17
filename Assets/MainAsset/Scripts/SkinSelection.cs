@@ -18,7 +18,7 @@ public class SkinSelection : MonoBehaviour
     private int currentSkin;
 
     [Header("Animation")] 
-    [SerializeField] private Vector3 initialPosition;
+    [SerializeField] private Transform initialPosition;
     private Vector2 delta = Vector2.zero;
     
     [Header("Buttons")]
@@ -28,6 +28,7 @@ public class SkinSelection : MonoBehaviour
     [Header("Optional")]
     [SerializeField] TEST_MoneyGiver moneyGiver;
     [SerializeField] TMP_Text moneyValueText;
+    [SerializeField] private GameManager gameManager;
     
     [Header("SkinAttributes")]
     [SerializeField] private int[] skinValue = new int[3]{ 0, 100, 1000};
@@ -44,13 +45,14 @@ public class SkinSelection : MonoBehaviour
         }
         currentSkin = 0;
         skins[0].SetActive(true);
-        skins[0].transform.position = initialPosition;
+        skins[0].transform.position = initialPosition.position;
         SelectSkin();
     }
     
     void Update()
     {
-        ReadSwipe();
+        if(gameManager.CurrentState != GameState.Playing)
+            ReadSwipe();
     }
     
     private void SelectSkin()
@@ -106,8 +108,6 @@ public class SkinSelection : MonoBehaviour
         startTouchPosition = currentTouchPosition;
     }
 
-    
-    
     private void ButtonSwap()
     {
         if (isBought[currentSkin])
@@ -140,5 +140,9 @@ public class SkinSelection : MonoBehaviour
         ButtonSwap();
 
     }
-    
+
+    public void Play()
+    {
+        SaveSystem.Instance.SetPlayableSkin(currentSkin);
+    }
 }

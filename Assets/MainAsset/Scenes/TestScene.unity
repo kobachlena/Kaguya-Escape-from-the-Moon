@@ -1784,7 +1784,6 @@ GameObject:
   - component: {fileID: 105073700}
   - component: {fileID: 114636156}
   - component: {fileID: 114636157}
-  - component: {fileID: 114636158}
   m_Layer: 7
   m_Name: 'CoatWoman '
   m_TagString: Untagged
@@ -2066,20 +2065,6 @@ MonoBehaviour:
   startPosition: {x: -60, y: -11.82, z: 31.4}
   endPosition: {x: 0, y: -11.82, z: 31.4}
   animationSpeed: 8
---- !u!114 &114636158
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 105290824}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5d6115cb508d2fe43851a07c9db88f02, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::SkinValue
-  skinValue: 1000
-  isBought: 0
 --- !u!114 &153759764
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3299,7 +3284,6 @@ GameObject:
   - component: {fileID: 323911995}
   - component: {fileID: 332955005}
   - component: {fileID: 332955006}
-  - component: {fileID: 332955007}
   m_Layer: 7
   m_Name: JacketWoman1
   m_TagString: Untagged
@@ -4349,20 +4333,6 @@ MonoBehaviour:
   startPosition: {x: -60, y: -11.82, z: 31.4}
   endPosition: {x: 0, y: -11.82, z: 31.4}
   animationSpeed: 8
---- !u!114 &332955007
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 323742921}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5d6115cb508d2fe43851a07c9db88f02, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::SkinValue
-  skinValue: 0
-  isBought: 1
 --- !u!4 &351907589 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 415822, guid: f2cc24a0516604f44b427b0abefb1b97, type: 3}
@@ -7016,7 +6986,6 @@ GameObject:
   - component: {fileID: 1835002210}
   - component: {fileID: 1842052996}
   - component: {fileID: 1842052997}
-  - component: {fileID: 1842052998}
   m_Layer: 7
   m_Name: 'PoliceWoman '
   m_TagString: Untagged
@@ -8179,20 +8148,6 @@ MonoBehaviour:
   startPosition: {x: -60, y: -11.82, z: 31.4}
   endPosition: {x: 0, y: -11.82, z: 31.4}
   animationSpeed: 8
---- !u!114 &1842052998
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1834720536}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5d6115cb508d2fe43851a07c9db88f02, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::SkinValue
-  skinValue: 100
-  isBought: 0
 --- !u!1 &1979531179
 GameObject:
   m_ObjectHideFlags: 0

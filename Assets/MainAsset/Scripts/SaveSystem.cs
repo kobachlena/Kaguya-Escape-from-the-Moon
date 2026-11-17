@@ -5,6 +5,7 @@ public class SaveSystem : MonoBehaviour
     public static readonly string BestScoreKey = "BestScore";
     public static readonly string MoneyValueKey = "MoneyValue";
     public static readonly string[] BoughtSkinsKey = { "FirstSkin", "SecondSkin", "ThirdSkin" };
+    public static readonly string PlayableSkinKey = "PlayableSkin";
     public static SaveSystem Instance{get; private set;}
     
     private void Awake()
@@ -48,6 +49,15 @@ public class SaveSystem : MonoBehaviour
     {
         return PlayerPrefs.GetInt(BoughtSkinsKey[skinIndex], 0) == 1;
     }
-    
-    
+
+    public int GetPlayableSkin()
+    {
+        return PlayerPrefs.GetInt(PlayableSkinKey, 0);
+    }
+
+    public void SetPlayableSkin(int skinIndex)
+    {
+        PlayerPrefs.SetInt(PlayableSkinKey, skinIndex);
+        PlayerPrefs.Save();
+    }
 }
