@@ -1,27 +1,23 @@
-using UnityEngine;
-using TMPro;
 using System.Collections;
-using UnityEngine.EventSystems;
+using System.Collections.Generic;
+using TMPro;
+using UnityEngine;
 using UnityEngine.InputSystem;
-using UnityEngine.UI;
 
 public enum GameState
 {
-    Countdown,
-    Playing,
-    Paused,
-    GameOver
-}
-
-public interface IRestartable
-{
-    void Restart(); 
+    AwaitingStart = 0,
+    Playing = 1,
+    Paused = 2,
+    GameOver = 3,
+    Shopping = 4,
+    Dying = 5
 }
 
 public class GameManager : MonoBehaviour, IRestartable
 {
-    public GameState CurrentState{get; private set; }
-    
+    public GameState CurrentState { get; private set; } = GameState.AwaitingStart;
+
     [Header("UI")]
     [SerializeField] private GameObject restartPanel;
     [SerializeField] private TMP_Text restartText;
@@ -31,120 +27,175 @@ public class GameManager : MonoBehaviour, IRestartable
     [SerializeField] private GameObject tapPanel;
     [SerializeField] private GameObject shopButton;
     [SerializeField] private GameObject shopPanel;
-    
-    
-    [SerializeField] private int countDownValue = 3;
-    private Coroutine countdownCoroutine;
-    private Coroutine waitForTapCoroutine;
-    
-    [Header("TechnicalThings")]
+    [SerializeField] private SkinSelection skinSelection;
+
+    [Header("Run")]
     [SerializeField] private PlayerMovement player;
     [SerializeField] private Planet planet;
     [SerializeField] private RoadSegmentManager roadSegmentManager;
     [SerializeField] private Score score;
     [SerializeField] private InputActionReference touchAction;
-    
-    [Header("Particles")]
+
+    [Header("Effects")]
     [SerializeField] private ParticleSystem explosionEffect;
-    
-    [Header("Sounds")]
     [SerializeField] private AudioClip gameMusic;
     [SerializeField] private AudioClip explosionClip;
-    [SerializeField]  private AudioClip uiClip;
-    
-    void Awake()
+    [SerializeField] private AudioClip uiClip;
+
+    private readonly HashSet<InputAction> enabledActions = new HashSet<InputAction>();
+    private readonly PointerUiHitTest uiHitTest = new PointerUiHitTest();
+    private Coroutine deathRoutine;
+    private int stateEnteredFrame;
+    private bool initialized;
+
+    private void Awake()
     {
         QualitySettings.vSyncCount = 0;
         Application.targetFrameRate = 60;
-        
-        CurrentState = GameState.Playing;
-        if (restartPanel == null)
+
+        if (skinSelection == null && shopPanel != null)
+            skinSelection = shopPanel.GetComponentInChildren<SkinSelection>(true);
+
+        if (player == null || planet == null || roadSegmentManager == null ||
+            score == null || restartPanel == null || restartText == null ||
+            pausePanel == null || pauseButton == null || scorePanel == null ||
+            tapPanel == null || touchAction == null || touchAction.action == null)
         {
-            Debug.LogError("Game over panel is not assigned.");
+            Debug.LogError("GameManager has missing run or UI references.", this);
+            enabled = false;
             return;
         }
-        
-        restartPanel.SetActive(false);
-        pausePanel.SetActive(false);
-        //countDown.SetActive(false);
-        scorePanel.SetActive(false);
-        pauseButton.SetActive(true);
-        shopButton.SetActive(true);
-        shopPanel.SetActive(false);
-        tapPanel.SetActive(true);
+
+        if (explosionEffect != null)
+        {
+            ParticleSystem.MainModule main = explosionEffect.main;
+            main.playOnAwake = false;
+            main.stopAction = ParticleSystemStopAction.None;
+            explosionEffect.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        }
+
+        initialized = true;
+        EnterState(GameState.AwaitingStart);
     }
 
-    void Start()
+    private void OnEnable()
     {
-        AudioManager.Instance.PlayMusic(gameMusic);
-        TapToContinue();
-    }
-    
-    void OnEnable(){touchAction.action.Enable();}
-    void OnDisable(){touchAction.action.Disable();}
+        if (!initialized)
+            return;
 
-    // IEnumerator CountDown()
-    // {
-    //     pausePanel.SetActive(false);
-    //     countDown.SetActive(true);
-    //     int countDownv = countDownValue;
-    //     
-    //     while (countDownv >= 0)
-    //     {
-    //         if(countDownv==0)
-    //             countDownText.text = "GO!";
-    //         else
-    //          countDownText.text = countDownv.ToString();
-    //         yield return new WaitForSecondsRealtime(0.7f);
-    //         countDownv--;
-    //     }
-    //     countDown.SetActive(false);
-    //     scorePanel.SetActive(true);
-    //     pauseButton.SetActive(true);
-    //     player.enabled = true;
-    //     Time.timeScale = 1f;
-    //     CurrentState = GameState.Playing;
-    //     countdownCoroutine = null;
-    // }
-    
-    
+        EnableAction(touchAction.action);
+        EnableAction(player.PressAction);
+        EnableAction(player.PositionAction);
+
+        if (skinSelection != null)
+        {
+            EnableAction(skinSelection.PressAction);
+            EnableAction(skinSelection.PositionAction);
+        }
+
+        if (CurrentState == GameState.Dying)
+            ShowGameOver();
+        else if (CurrentState == GameState.Playing)
+            EnterState(GameState.AwaitingStart);
+    }
+
+    private void Start()
+    {
+        ApplySelectedSkin();
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayMusic(gameMusic);
+    }
+
+    private void OnDisable()
+    {
+        foreach (InputAction action in enabledActions)
+            action.Disable();
+
+        enabledActions.Clear();
+
+        if (deathRoutine != null)
+        {
+            StopCoroutine(deathRoutine);
+            deathRoutine = null;
+        }
+
+        if (initialized && player != null)
+            player.enabled = false;
+    }
+
+    private void OnDestroy()
+    {
+        if (initialized)
+            Time.timeScale = 1f;
+    }
+
+    private void LateUpdate()
+    {
+        if (CurrentState != GameState.AwaitingStart || Time.frameCount == stateEnteredFrame ||
+            !touchAction.action.WasPressedThisFrame())
+            return;
+
+        if (PointerUiHitTest.TryGetPosition(touchAction.action, out Vector2 position) &&
+            uiHitTest.IsOverUi(position))
+            return;
+
+        EnterState(GameState.Playing);
+    }
+
+    private void OnApplicationPause(bool paused)
+    {
+        if (paused && initialized && CurrentState == GameState.Playing)
+            Pause();
+    }
+
     public void Pause()
     {
-        if (CurrentState == GameState.Playing || CurrentState == GameState.Countdown)
-        {
-            tapPanel.SetActive(false);
-            shopButton.SetActive(false);
-            Time.timeScale = 0f;
-            player.enabled = false;
-            CurrentState = GameState.Paused;
-            scorePanel.SetActive(false);
-            pauseButton.SetActive(false);
-            pausePanel.SetActive(true);
-        }
+        if (initialized && (CurrentState == GameState.Playing || CurrentState == GameState.AwaitingStart))
+            EnterState(GameState.Paused);
     }
 
     public void Resume()
     {
-        if (CurrentState != GameState.Paused)
-            return;
-        TapToContinue();
+        if (initialized && (CurrentState == GameState.Paused || CurrentState == GameState.Shopping))
+            EnterState(GameState.AwaitingStart);
     }
 
-   
+    public void Shop()
+    {
+        if (initialized && shopPanel != null &&
+            (CurrentState == GameState.Playing || CurrentState == GameState.AwaitingStart))
+            EnterState(GameState.Shopping);
+    }
+
     public void GameOver()
     {
-        if (CurrentState != GameState.Playing) return;
+        if (CurrentState != GameState.Playing)
+            return;
+
+        EnterState(GameState.Dying);
         player.GameOver();
-        player.enabled = false;
-        CurrentState = GameState.GameOver;
+
+        int distance = player.GetDistance();
         score.CheckBestScore();
-        restartText.text = "Score:\n" + player.GetDistance().ToString();
-        scorePanel.SetActive(false);
-        pauseButton.SetActive(false);
-        shopButton.SetActive(false);
-        AudioManager.Instance.PlayEffect(explosionClip);
-        AudioManager.Instance.StopMusic();
-        StartCoroutine(SetExplosion());
+        restartText.text = "Score:\n" + distance;
+
+        if (AudioManager.Instance != null)
+        {
+            AudioManager.Instance.PlayEffect(explosionClip);
+            AudioManager.Instance.StopMusic();
+        }
+
+        if (explosionEffect == null)
+        {
+            ShowGameOver();
+            return;
+        }
+
+        explosionEffect.transform.position = player.transform.position;
+        explosionEffect.gameObject.SetActive(true);
+        explosionEffect.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        explosionEffect.Play(true);
+        deathRoutine = StartCoroutine(WaitForExplosion());
     }
 
     public void Restart()
@@ -152,108 +203,79 @@ public class GameManager : MonoBehaviour, IRestartable
         if (CurrentState != GameState.GameOver)
             return;
 
+        if (explosionEffect != null)
+            explosionEffect.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+
         player.Restart();
         planet.Restart();
         roadSegmentManager.Restart();
+        EnterState(GameState.AwaitingStart);
 
-        restartPanel.SetActive(false);
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayMusic(gameMusic);
+    }
 
-        TapToContinue();
-        AudioManager.Instance.PlayMusic(gameMusic);
+    public void ApplySelectedSkin()
+    {
+        if (player != null)
+            player.Play();
     }
 
     public void Quit()
     {
-        #if UNITY_EDITOR
-            UnityEditor.EditorApplication.isPlaying = false;
-        #else
-            Application.Quit();
-        #endif
-        
         PlayerPrefs.Save();
+#if UNITY_EDITOR
+        UnityEditor.EditorApplication.isPlaying = false;
+#else
+        Application.Quit();
+#endif
     }
 
-    // private void BeginCountdown()
-    // {
-    //     if (countdownCoroutine != null)
-    //         StopCoroutine(countdownCoroutine);
-    //     
-    //     Time.timeScale = 0f;
-    //     player.enabled = false;
-    //     CurrentState = GameState.Countdown;
-    //
-    //     countdownCoroutine = StartCoroutine(CountDown());
-    // }
-
-    IEnumerator SetExplosion()
+    private void EnterState(GameState state)
     {
-        explosionEffect.gameObject.SetActive(true);
-        explosionEffect.transform.position = player.transform.position;
-        explosionEffect.Stop(
-            true,
-            ParticleSystemStopBehavior.StopEmittingAndClear
-        );
-        explosionEffect.Play(true);
+        CurrentState = state;
+        stateEnteredFrame = Time.frameCount;
+
+        bool playing = state == GameState.Playing;
+        bool waiting = state == GameState.AwaitingStart;
+        bool shopping = state == GameState.Shopping;
+
+        Time.timeScale = playing || state == GameState.Dying ? 1f : 0f;
+        player.enabled = playing;
+
+        tapPanel.SetActive(waiting);
+        scorePanel.SetActive(playing);
+        pausePanel.SetActive(state == GameState.Paused);
+        restartPanel.SetActive(state == GameState.GameOver);
+        pauseButton.SetActive(waiting || playing);
+
+        if (shopButton != null)
+            shopButton.SetActive((waiting || playing) && shopPanel != null);
+
+        if (shopPanel != null)
+            shopPanel.SetActive(shopping);
+    }
+
+    private void EnableAction(InputAction action)
+    {
+        if (action == null || action.enabled)
+            return;
+
+        action.Enable();
+        enabledActions.Add(action);
+    }
+
+    private IEnumerator WaitForExplosion()
+    {
         yield return new WaitForSecondsRealtime(3f);
-        Time.timeScale = 0f;
-        AudioManager.Instance.PlayEffect(uiClip);
-        restartPanel.SetActive(true);
+        deathRoutine = null;
+        ShowGameOver();
     }
 
-
-    private void TapToContinue()
+    private void ShowGameOver()
     {
-        scorePanel.SetActive(false);
-        pausePanel.SetActive(false);
-        shopPanel.SetActive(false);
-        pauseButton.SetActive(true);
-        shopButton.SetActive(true);
-        tapPanel.SetActive(true);
-        Time.timeScale = 0f;
-        player.enabled = false;
-        touchAction.action.Enable();
-        CurrentState = GameState.Countdown;
-        if (waitForTapCoroutine != null)
-            StopCoroutine(waitForTapCoroutine);
-        
-        waitForTapCoroutine = StartCoroutine(WaitForTap());
-    }
-
-    private IEnumerator WaitForTap()
-    {
-        while (true)
-        {
-            if (touchAction.action.WasPressedThisFrame())
-            {
-                bool overUI = EventSystem.current.IsPointerOverGameObject();
-
-                if (!overUI)
-                    break;
-            }
-            
-            yield return null;
-        }
-        
-        waitForTapCoroutine = null;
-        tapPanel.SetActive(false);
-        scorePanel.SetActive(true);
-        pauseButton.SetActive(true);
-        Time.timeScale = 1f;
-        player.enabled = true;
-        CurrentState = GameState.Playing;
-    }
-
-
-    public void Shop()
-    {
-        shopButton.SetActive(false);
-        pauseButton.SetActive(false);
-        tapPanel.SetActive(false);
-        shopPanel.SetActive(true);
-        Time.timeScale = 0f;
-        player.enabled = false;
-        CurrentState = GameState.Paused;
-        scorePanel.SetActive(false);
-        pauseButton.SetActive(false);
+        EnterState(GameState.GameOver);
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayEffect(uiClip);
     }
 }

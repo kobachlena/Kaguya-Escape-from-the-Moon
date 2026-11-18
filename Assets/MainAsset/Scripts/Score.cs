@@ -11,7 +11,7 @@ public class Score : MonoBehaviour
 
     void Start()
     {
-        bestScoreValue = SaveSystem.Instance.GetBestScore();
+        bestScoreValue = SaveSystem.Instance != null ? SaveSystem.Instance.GetBestScore() : 0;
         bestScoreText.text = "Best Score:\n" + bestScoreValue.ToString();
         displayedScore = -1;
     }
@@ -35,7 +35,8 @@ public class Score : MonoBehaviour
 
         bestScoreValue = currentScore;
 
-        SaveSystem.Instance.SaveBestScore(bestScoreValue);
+        if (SaveSystem.Instance != null)
+            SaveSystem.Instance.SaveBestScore(bestScoreValue);
 
         bestScoreText.text =
             "Best Score:\n" + bestScoreValue;

@@ -3,22 +3,23 @@ using UnityEngine;
 public class ObstacleTrigger : MonoBehaviour
 {
     private GameManager gameManager;
-    void OnTriggerEnter(Collider other)
+
+    private void OnTriggerEnter(Collider other)
     {
+        if (!other.CompareTag("Player"))
+            return;
+
         if (gameManager == null)
         {
-            Debug.LogError("ObstacleTrigger was not initialized.");
+            Debug.LogError("ObstacleTrigger was not initialized.", this);
             return;
         }
-        
-        if (other.CompareTag("Player"))
-        {
-            gameManager.GameOver();
-        }
+
+        gameManager.GameOver();
     }
 
-    public void Initialize(GameManager gameManager)
+    public void Initialize(GameManager manager)
     {
-        this.gameManager = gameManager;
+        gameManager = manager;
     }
 }

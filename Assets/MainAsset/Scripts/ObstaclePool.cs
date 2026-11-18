@@ -3,41 +3,69 @@ using UnityEngine;
 
 public class ObstaclePool : MonoBehaviour
 {
-    
     [SerializeField] private GameObject[] obstaclePrefabs;
-    [Min(1)]
-    [SerializeField] private int obstaclesN = 3;
+    [Min(1)] [SerializeField] private int obstaclesN = 3;
     [SerializeField] private GameManager gameManager;
-    private Queue<GameObject> obstacles;
 
-    void Awake()
+    private readonly Queue<GameObject> available = new Queue<GameObject>();
+    private readonly HashSet<GameObject> rented = new HashSet<GameObject>();
+    private readonly List<GameObject> validPrefabs = new List<GameObject>();
+
+    private void Awake()
     {
-        obstacles = new Queue<GameObject>();
-        
-        for (int i = 0; i < obstaclesN; i++)
+        if (obstaclePrefabs != null)
         {
-            GameObject obstacle = Instantiate(obstaclePrefabs[Random.Range(0,obstaclePrefabs.Length)], transform);
-            obstacle.GetComponent<ObstacleTrigger>().Initialize(gameManager);
-            obstacle.SetActive(false);
-            obstacles.Enqueue(obstacle);    
-        }    
+            foreach (GameObject prefab in obstaclePrefabs)
+            {
+                if (prefab != null && prefab.GetComponent<ObstacleTrigger>() != null)
+                    validPrefabs.Add(prefab);
+                else
+                    Debug.LogError("Obstacle prefab is missing or has no ObstacleTrigger on its root.", this);
+            }
+        }
+
+        if (validPrefabs.Count == 0 || gameManager == null)
+            Debug.LogError("ObstaclePool requires valid prefabs and a GameManager.", this);
     }
 
-    public void Return(GameObject obstacle)
+    public bool WarmUp(int capacity)
     {
-        obstacle.transform.SetParent(transform);
+        if (validPrefabs.Count == 0 || gameManager == null)
+            return false;
+
+        int target = Mathf.Max(obstaclesN, capacity);
+        while (available.Count + rented.Count < target)
+            CreateObstacle();
+
+        return true;
+    }
+
+    private void CreateObstacle()
+    {
+        GameObject prefab = validPrefabs[Random.Range(0, validPrefabs.Count)];
+        GameObject obstacle = Instantiate(prefab, transform);
         obstacle.SetActive(false);
-        obstacles.Enqueue(obstacle);
+        obstacle.GetComponent<ObstacleTrigger>().Initialize(gameManager);
+        available.Enqueue(obstacle);
     }
 
     public GameObject Get()
     {
-        if (obstacles.Count == 0) return null;
-        GameObject obstacle = obstacles.Dequeue();
-        obstacle.SetActive(true);
+        if (available.Count == 0)
+            return null;
+
+        GameObject obstacle = available.Dequeue();
+        rented.Add(obstacle);
         return obstacle;
     }
-    
-    
-    
+
+    public void Return(GameObject obstacle)
+    {
+        if (obstacle == null || !rented.Remove(obstacle))
+            return;
+
+        obstacle.SetActive(false);
+        obstacle.transform.SetParent(transform);
+        available.Enqueue(obstacle);
+    }
 }

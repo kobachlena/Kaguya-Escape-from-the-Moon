@@ -5,7 +5,7 @@ public class PulsePanel : MonoBehaviour
     
     [SerializeField] private float minAlpha = 0.2f;
     [SerializeField] private float maxAlpha = 0.8f;
-    [SerializeField] private float fadeDuration  = 1f;
+    [Min(0.01f)] [SerializeField] private float fadeDuration  = 1f;
     
     [SerializeField] private CanvasGroup canvasGroup;
     private Coroutine pulseCoroutine;
@@ -13,11 +13,15 @@ public class PulsePanel : MonoBehaviour
     
     private void Awake()
     {
-        canvasGroup.alpha = minAlpha;
+        if (canvasGroup != null)
+            canvasGroup.alpha = minAlpha;
     }
     
     void OnEnable()
     {
+        if (canvasGroup == null)
+            return;
+
         canvasGroup.alpha = minAlpha;
         if (pulseCoroutine != null)
         {
@@ -37,12 +41,13 @@ public class PulsePanel : MonoBehaviour
 
     IEnumerator Fade(float minAlpha, float maxAlpha)
     {
+        float duration = Mathf.Max(0.01f, fadeDuration);
         float elapsedTime = 0f;
 
-        while (elapsedTime < fadeDuration)
+        while (elapsedTime < duration)
         {
             elapsedTime += Time.unscaledDeltaTime;
-            canvasGroup.alpha = Mathf.Lerp(minAlpha, maxAlpha, elapsedTime / fadeDuration);
+            canvasGroup.alpha = Mathf.Lerp(minAlpha, maxAlpha, elapsedTime / duration);
             yield return null;
         }
         

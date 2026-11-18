@@ -1,35 +1,25 @@
-using System;
 using UnityEngine;
 
-public class Planet : MonoBehaviour
+public class Planet : MonoBehaviour, IRestartable
 {
     [SerializeField] private Vector3 startSize;
     [SerializeField] private Vector3 endSize;
-    [Min(0.1f)]
-    [SerializeField] private float rotationSpeed;
+    [Min(0.1f)] [SerializeField] private float rotationSpeed;
+    [Min(0.1f)] [SerializeField] private float fullGrowthDistance = 2900f;
     [SerializeField] private PlayerMovement player;
-    private float progress;
-    private float distanceP;
-    
-    void Update()
-    {
-       distanceP = player.GetDistance();
-       IncreaseSize(distanceP);
-       transform.Rotate(0f, rotationSpeed * Time.deltaTime, 0f);
-    }
 
-
-    void IncreaseSize(float distance)
+    private void Update()
     {
-        progress = Mathf.Clamp01(distanceP / 2900);
+        if (player == null || Time.timeScale == 0f)
+            return;
+
+        float progress = Mathf.Clamp01(player.GetDistance() / Mathf.Max(0.1f, fullGrowthDistance));
         transform.localScale = Vector3.Lerp(startSize, endSize, progress);
-        
+        transform.Rotate(0f, rotationSpeed * Time.deltaTime, 0f);
     }
-    
+
     public void Restart()
     {
-        progress = 0f;
-        distanceP = 0f;
         transform.localScale = startSize;
     }
 }

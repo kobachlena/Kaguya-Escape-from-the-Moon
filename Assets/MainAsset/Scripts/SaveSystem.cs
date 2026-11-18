@@ -1,13 +1,16 @@
+using System;
 using UnityEngine;
 
 public class SaveSystem : MonoBehaviour
 {
     public static readonly string BestScoreKey = "BestScore";
     public static readonly string MoneyValueKey = "MoneyValue";
-    public static readonly string[] BoughtSkinsKey = { "FirstSkin", "SecondSkin", "ThirdSkin" };
     public static readonly string PlayableSkinKey = "PlayableSkin";
-    public static SaveSystem Instance{get; private set;}
-    
+    private static readonly string[] BoughtSkinsKey = { "FirstSkin", "SecondSkin", "ThirdSkin" };
+
+    public static SaveSystem Instance { get; private set; }
+    public event Action<int> MoneyChanged;
+
     private void Awake()
     {
         if (Instance != null && Instance != this)
@@ -16,48 +19,101 @@ public class SaveSystem : MonoBehaviour
             return;
         }
 
-        Instance = this; 
+        Instance = this;
         DontDestroyOnLoad(gameObject);
-
-        SaveBoughtSkin(0);
     }
 
+    private void OnDestroy()
+    {
+        if (Instance == this)
+            Instance = null;
+    }
 
     public void SaveMoney(int moneyValue)
     {
+        moneyValue = Mathf.Max(0, moneyValue);
+        if (moneyValue == GetMoneyValue())
+            return;
+
         PlayerPrefs.SetInt(MoneyValueKey, moneyValue);
         PlayerPrefs.Save();
+        MoneyChanged?.Invoke(moneyValue);
     }
 
-    public void SaveBestScore(int  bestScore)
+    public void SaveBestScore(int bestScore)
     {
+        if (bestScore <= GetBestScore())
+            return;
+
         PlayerPrefs.SetInt(BestScoreKey, bestScore);
         PlayerPrefs.Save();
     }
 
-    public void SaveBoughtSkin(int skinIndex)
+    public int GetBestScore() => PlayerPrefs.GetInt(BestScoreKey, 0);
+    public int GetMoneyValue() => Mathf.Max(0, PlayerPrefs.GetInt(MoneyValueKey, 0));
+
+    public bool IsSkinBought(int skinIndex)
     {
+        if (!IsValidSkin(skinIndex))
+            return false;
+
+        return skinIndex == 0 || PlayerPrefs.GetInt(BoughtSkinsKey[skinIndex], 0) == 1;
+    }
+
+    public bool TryBuySkin(int skinIndex, int price)
+    {
+        if (!IsValidSkin(skinIndex) || IsSkinBought(skinIndex) || price < 0)
+            return false;
+
+        int balance = GetMoneyValue();
+        if (balance < price)
+            return false;
+
+        int newBalance = balance - price;
+        PlayerPrefs.SetInt(MoneyValueKey, newBalance);
         PlayerPrefs.SetInt(BoughtSkinsKey[skinIndex], 1);
         PlayerPrefs.Save();
-    }
-    
-    public int GetBestScore(){return PlayerPrefs.GetInt(BestScoreKey, 0);}
-    
-    public int GetMoneyValue(){return PlayerPrefs.GetInt(MoneyValueKey, 0);}
-
-    public bool isSkinBought(int skinIndex)
-    {
-        return PlayerPrefs.GetInt(BoughtSkinsKey[skinIndex], 0) == 1;
+        MoneyChanged?.Invoke(newBalance);
+        return true;
     }
 
     public int GetPlayableSkin()
     {
-        return PlayerPrefs.GetInt(PlayableSkinKey, 0);
+        int skinIndex = PlayerPrefs.GetInt(PlayableSkinKey, 0);
+        return IsSkinBought(skinIndex) ? skinIndex : 0;
     }
 
-    public void SetPlayableSkin(int skinIndex)
+    public bool SetPlayableSkin(int skinIndex)
     {
-        PlayerPrefs.SetInt(PlayableSkinKey, skinIndex);
+        if (!IsSkinBought(skinIndex))
+            return false;
+
+        if (PlayerPrefs.GetInt(PlayableSkinKey, 0) != skinIndex)
+        {
+            PlayerPrefs.SetInt(PlayableSkinKey, skinIndex);
+            PlayerPrefs.Save();
+        }
+
+        return true;
+    }
+
+    private static bool IsValidSkin(int skinIndex)
+    {
+        return skinIndex >= 0 && skinIndex < BoughtSkinsKey.Length;
+    }
+    
+#if UNITY_EDITOR
+    [ContextMenu("Debug/Reset Skin Purchase")]
+    private void ResetSkinPurchase()
+    {
+        const int skinIndex = 2; 
+
+        PlayerPrefs.DeleteKey(BoughtSkinsKey[skinIndex]);
+
+        if (PlayerPrefs.GetInt(PlayableSkinKey, 0) == skinIndex)
+            PlayerPrefs.SetInt(PlayableSkinKey, 0);
+
         PlayerPrefs.Save();
     }
+#endif
 }

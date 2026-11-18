@@ -1,148 +1,162 @@
+using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using System.Collections;
-using TMPro;
 
 public class SkinSelection : MonoBehaviour
 {
-
     [Header("Swipe")]
-    [Range(0.02f, 0.6f)] 
-    [SerializeField] private float minSwipeScreenPercent = 0.6f;
-    private Vector2 startTouchPosition;
+    [Range(0.02f, 0.6f)] [SerializeField] private float minSwipeScreenPercent = 0.6f;
     [SerializeField] private InputActionReference touchAction;
     [SerializeField] private InputActionReference pressAction;
-    
+
     [Header("Skins")]
     [SerializeField] private GameObject[] skins;
-    private int currentSkin;
-
-    [Header("Animation")] 
+    [SerializeField] private int[] skinValue = { 0, 100, 1000 };
     [SerializeField] private Transform initialPosition;
-    private Vector2 delta = Vector2.zero;
-    
-    [Header("Buttons")]
+
+    [Header("UI")]
     [SerializeField] private GameObject playButton;
     [SerializeField] private GameObject buyButtons;
-    
-    [Header("Optional")]
-    [SerializeField] TEST_MoneyGiver moneyGiver;
-    [SerializeField] TMP_Text moneyValueText;
+    [SerializeField] private TMP_Text moneyValueText;
+    [SerializeField] private TMP_Text balanceText;
     [SerializeField] private GameManager gameManager;
-    
-    [Header("SkinAttributes")]
-    [SerializeField] private int[] skinValue = new int[3]{ 0, 100, 1000};
-    [SerializeField] private bool[] isBought = new bool[3]{ true, false, false};
-    
-    
-    public float GetDeltaX(){ return delta.x; }
-    
-    void Start()
+
+    internal InputAction PressAction => pressAction != null ? pressAction.action : null;
+    internal InputAction PositionAction => touchAction != null ? touchAction.action : null;
+
+    private SaveSystem saveSystem;
+    private int currentSkin;
+    private float deltaX;
+    private bool hasGesture;
+    private bool initialized;
+    private Vector2 swipeOrigin;
+
+    private void Start()
     {
-        for (int i = 0; i < isBought.Length; i++)
+        saveSystem = SaveSystem.Instance;
+        if (saveSystem == null || gameManager == null || skins == null || skins.Length == 0 ||
+            skinValue == null || skinValue.Length != skins.Length ||
+            playButton == null || buyButtons == null || PressAction == null || PositionAction == null)
         {
-            isBought[i] = SaveSystem.Instance.isSkinBought(i);
+            Debug.LogError("SkinSelection requires matching models and prices, input actions, UI and SaveSystem.", this);
+            enabled = false;
+            return;
         }
-        currentSkin = 0;
-        skins[0].SetActive(true);
-        skins[0].transform.position = initialPosition.position;
-        SelectSkin();
+
+        initialized = true;
+        saveSystem.MoneyChanged += ShowBalance;
+        RefreshOnOpen();
     }
-    
-    void Update()
+
+    private void OnEnable()
     {
-        if(gameManager.CurrentState != GameState.Playing)
-            ReadSwipe();
+        hasGesture = false;
+        if (initialized)
+            RefreshOnOpen();
     }
-    
-    private void SelectSkin()
+
+    private void OnDestroy()
+    {
+        if (saveSystem != null)
+            saveSystem.MoneyChanged -= ShowBalance;
+    }
+
+    private void Update()
+    {
+        if (!initialized || gameManager.CurrentState != GameState.Shopping)
+        {
+            hasGesture = false;
+            return;
+        }
+
+        ReadSwipe();
+    }
+
+    private void RefreshOnOpen()
+    {
+        int selectedSkin = saveSystem.GetPlayableSkin();
+        currentSkin = selectedSkin < skins.Length ? selectedSkin : 0;
+        deltaX = 0f;
+        ShowCurrentSkin();
+
+        if (initialPosition != null && skins[currentSkin] != null)
+            skins[currentSkin].transform.position = initialPosition.position;
+
+        ShowBalance(saveSystem.GetMoneyValue());
+    }
+
+    public float GetDeltaX() => deltaX;
+
+    private void ShowCurrentSkin()
     {
         for (int i = 0; i < skins.Length; i++)
         {
-            skins[i].SetActive(i == currentSkin);
+            if (skins[i] != null)
+                skins[i].SetActive(i == currentSkin);
         }
 
-        ButtonSwap();
+        RefreshButtons();
     }
 
     private void ReadSwipe()
     {
-        Vector2 currentTouchPosition = touchAction.action.ReadValue<Vector2>();
-        
-        if (pressAction.action.WasPressedThisFrame())
+        if (!PressAction.IsPressed())
         {
-            startTouchPosition = touchAction.action.ReadValue<Vector2>();
+            hasGesture = false;
             return;
         }
 
-        if (!pressAction.action.IsPressed())
-            return;
-        
-        delta = currentTouchPosition - startTouchPosition;
-        float minSwipeDistance = Screen.width * minSwipeScreenPercent;
-
-        if (Mathf.Abs(delta.x) <= minSwipeDistance)
-            return;
-
-        if (delta.x > 0)
+        Vector2 position = PositionAction.ReadValue<Vector2>();
+        if (PressAction.WasPressedThisFrame())
         {
-            if (currentSkin == skins.Length - 1)
-                currentSkin = 0;
-            else
-                currentSkin++;
-            
-            SelectSkin();
-        }
-        
-        else
-        {
-            if(currentSkin == 0)
-                currentSkin = skins.Length - 1;
-            else
-                currentSkin--;
-            
-            SelectSkin();
-            
+            swipeOrigin = position;
+            hasGesture = true;
+            return;
         }
 
-        startTouchPosition = currentTouchPosition;
+        if (!hasGesture)
+            return;
+
+        deltaX = position.x - swipeOrigin.x;
+        if (Mathf.Abs(deltaX) <= Screen.width * minSwipeScreenPercent)
+            return;
+
+        int direction = deltaX > 0f ? 1 : -1;
+        currentSkin = (currentSkin + direction + skins.Length) % skins.Length;
+        swipeOrigin = position;
+        ShowCurrentSkin();
     }
 
-    private void ButtonSwap()
+    private void RefreshButtons()
     {
-        if (isBought[currentSkin])
-        {
-            playButton.SetActive(true);
-            buyButtons.SetActive(false);
-        }
-        else if (!isBought[currentSkin])
-        {
-            playButton.SetActive(false);
-            buyButtons.SetActive(true);
-            moneyValueText.text = skinValue[currentSkin].ToString();     
-        }
+        bool owned = saveSystem.IsSkinBought(currentSkin);
+        playButton.SetActive(owned);
+        buyButtons.SetActive(!owned);
+        if (moneyValueText != null)
+            moneyValueText.text = skinValue[currentSkin].ToString();
+    }
 
+    private void ShowBalance(int balance)
+    {
+        if (balanceText != null)
+            balanceText.text = "Money: " + balance;
     }
 
     public void BuySkin()
     {
-        if (isBought[currentSkin])
+        if (!initialized || gameManager.CurrentState != GameState.Shopping)
             return;
-        if (TEST_MoneyGiver.Instance.moneyValue < skinValue[currentSkin])
-            return;
-            
-        isBought[currentSkin] = true;
-        moneyGiver.moneyValue -= skinValue[currentSkin];
-            
-        SaveSystem.Instance.SaveBoughtSkin(currentSkin);
-        SaveSystem.Instance.SaveMoney(TEST_MoneyGiver.Instance.moneyValue);
-        
-        ButtonSwap();
 
+        if (saveSystem.TryBuySkin(currentSkin, skinValue[currentSkin]))
+            RefreshButtons();
     }
 
     public void Play()
     {
-        SaveSystem.Instance.SetPlayableSkin(currentSkin);
+        if (!initialized || gameManager.CurrentState != GameState.Shopping)
+            return;
+
+        if (saveSystem.SetPlayableSkin(currentSkin))
+            gameManager.ApplySelectedSkin();
     }
 }

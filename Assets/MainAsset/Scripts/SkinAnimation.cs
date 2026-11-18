@@ -1,5 +1,7 @@
 using UnityEngine;
 
+[DisallowMultipleComponent]
+
 public class SkinAnimation : MonoBehaviour
 {
 
@@ -8,11 +10,19 @@ public class SkinAnimation : MonoBehaviour
     [SerializeField] private Transform centralPosition;
     [SerializeField] private float animationSpeed;
 
-    private float swipeDirection;
+    private SkinSelection skinSelection;
+
+    private void Awake()
+    {
+        skinSelection = GetComponentInParent<SkinSelection>();
+    }
     
     void OnEnable()
     {
-        swipeDirection = GetComponentInParent<SkinSelection>().GetDeltaX();
+        if (skinSelection == null || leftPosition == null || rightPosition == null)
+            return;
+
+        float swipeDirection = skinSelection.GetDeltaX();
         
         if(swipeDirection >= 0)
             transform.position = leftPosition.position;
@@ -22,6 +32,7 @@ public class SkinAnimation : MonoBehaviour
     
     void Update()
     {
-        transform.position = Vector3.Lerp(transform.position, centralPosition.position, animationSpeed * Time.unscaledDeltaTime);
+        if (centralPosition != null)
+            transform.position = Vector3.Lerp(transform.position, centralPosition.position, animationSpeed * Time.unscaledDeltaTime);
     }
 }

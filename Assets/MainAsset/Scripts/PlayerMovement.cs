@@ -1,200 +1,215 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
-using System.Collections;
-using UnityEngine.EventSystems;
-using Vector2 = UnityEngine.Vector2;
-using Vector3 = UnityEngine.Vector3;
+using UnityEngine.InputSystem.Controls;
 
+[RequireComponent(typeof(CharacterController))]
 public class PlayerMovement : MonoBehaviour, IRestartable
 {
-    [Header("PlayerProperties")] private Vector3 movement;
-    private bool isGrounded = true;
-    private bool isCrouching = false;
+    [Header("Player Skins")]
+    [SerializeField] private PlayerVisuals visuals;
+    [SerializeField, HideInInspector] private GameObject[] playerModel;
+    [SerializeField, HideInInspector] private GameObject[] crouchModel;
 
-    private float xMovement;
-    private float yMovement;
-    private float zMovement;
-    private CharacterController playerController;
-    
-    [Header("Player Skins")] 
-    [SerializeField] GameObject[]  playerModel  = new GameObject[3];
-
-    [SerializeField] private GameObject[] crouchModel = new GameObject[3];
-    
-    [Header("Speed")] [Min(0f)] [SerializeField]
-    private float startSpeed = 10f;
-
+    [Header("Speed")]
+    [Min(0f)] [SerializeField] private float startSpeed = 10f;
     [Min(0f)] [SerializeField] private float acceleration = 2f;
     [Min(0f)] [SerializeField] private float maxSpeed = 25f;
-    private float currentSpeed;
 
-    [Header("Jump")] [SerializeField] private float gravityForce = 55f;
+    [Header("Jump")]
+    [SerializeField] private float gravityForce = 55f;
     [SerializeField] private float jumpForce = 20f;
-    private float verticalVelocity = 0f;
+    [Min(0f)] [SerializeField] private float crouchPullSpeed = 30f;
 
-    [Header("Ground")] [SerializeField] private Transform groundChecker;
+    [Header("Ground")]
+    [SerializeField] private Transform groundChecker;
     [SerializeField] private float groundCheckerRadius = 0.25f;
     [SerializeField] private LayerMask groundLayer;
-    private bool wasGrounded = true;
 
-    [Header("Lane")] [SerializeField] private float laneSwitchSpeed = 5f;
+    [Header("Lane")]
+    [SerializeField] private float laneSwitchSpeed = 5f;
     [SerializeField] private float laneSwitchDistance = 4f;
-    private int currentLane = 0;
-    private bool inputPressed = false;
 
-    [Header("Buttons")] 
+    [Header("Buttons")]
     [SerializeField] private InputActionReference crouchAction;
     [SerializeField] private InputActionReference touchAction;
-
-    [Header("Swipe")] [Range(0.02f, 0.3f)] [SerializeField]
-    private float minSwipeScreenPercent = 0.08f;
-
-    private Vector2 startTouchPosition;
-    private bool pointerHeld;
+    [Range(0.02f, 0.3f)] [SerializeField] private float minSwipeScreenPercent = 0.08f;
 
     [Header("StartPoint")]
     [SerializeField] private Transform playerStartPoint;
 
-    [Header("Audio")] 
+    [Header("Audio")]
     [SerializeField] private AudioClip jumpClip;
     [SerializeField] private AudioClip crouchClip;
 
+    internal InputAction PressAction => crouchAction != null ? crouchAction.action : null;
+    internal InputAction PositionAction => touchAction != null ? touchAction.action : null;
 
+    private readonly PointerUiHitTest uiHitTest = new PointerUiHitTest();
+    private CharacterController playerController;
+    private float currentSpeed;
+    private float verticalVelocity;
+    private int currentLane;
+    private bool isCrouching;
+    private bool hasGesture;
+    private Vector2 swipeOrigin;
+    private TouchControl gestureTouch;
+    private int gestureTouchId;
 
-    private void OnEnable()
+    private void Awake()
     {
-        if (crouchAction != null)
-            crouchAction.action.Enable();
+        playerController = GetComponent<CharacterController>();
+        if (visuals == null)
+            visuals = GetComponent<PlayerVisuals>();
+        if (visuals == null)
+            visuals = gameObject.AddComponent<PlayerVisuals>();
 
-        if (touchAction != null)
-            touchAction.action.Enable();
+        visuals.UseLegacyModels(playerModel, crouchModel);
+        currentSpeed = startSpeed;
+        SetCrouchPose(false, force: true);
+
+        if (groundChecker == null || playerStartPoint == null || PressAction == null || PositionAction == null)
+            Debug.LogError("PlayerMovement requires a start point, a ground checker and two input actions.", this);
+    }
+
+    private void Start()
+    {
+        Play();
     }
 
     private void OnDisable()
     {
-        if (crouchAction != null)
-            crouchAction.action.Disable();
-
-        if (touchAction != null)
-            touchAction.action.Disable();
-
-        ResetInputState();
+        ClearGesture();
     }
 
-    private void ResetInputState()
+    private void Update()
     {
-        pointerHeld = false;
-        startTouchPosition = Vector2.zero;
-    }
-
-    void Awake()
-    {
-        playerController = GetComponent<CharacterController>();
-    }
-
-    void Start()
-    {
-        currentSpeed = startSpeed;
-        playerController.height = 2f;
-        playerController.center = new Vector3(0f, 0f, 0f);
-        for (int i = 0; i < playerModel.Length; i++)
-        {
-            playerModel[i].SetActive(i==SaveSystem.Instance.GetPlayableSkin());
-            crouchModel[i].SetActive(false);
-        }
-        wasGrounded = true;
-    }
-
-    void Update()
-    {
-        isGrounded = IsGrounded();
-        Acceleration();
-        ReadSwipe();
-        SwitchLanes();
-        Gravity();
-        Crouch();
-        MoveForward();
-        CheckLanding();
-    }
-
-    private void Acceleration()
-    {
-        currentSpeed = Mathf.MoveTowards(currentSpeed, maxSpeed, acceleration * Time.deltaTime);
-    }
-
-    private void MoveForward()
-    {
-        yMovement = verticalVelocity * Time.deltaTime;
-        zMovement = currentSpeed * Time.deltaTime;
-        movement = new Vector3(xMovement, yMovement, zMovement);
-        playerController.Move(movement);
-    }
-
-    private void SwitchLanes()
-    {
-        float targetX = currentLane * laneSwitchDistance;
-
-        float newX = Mathf.MoveTowards(transform.position.x, targetX, laneSwitchSpeed * Time.deltaTime);
-        xMovement = newX - transform.position.x;
-    }
-
-    private void ReadSwipe()
-    {
-        Vector2 currentTouchPosition = touchAction.action.ReadValue<Vector2>();
-
-        if (crouchAction.action.WasPressedThisFrame())
-        {
-            startTouchPosition = touchAction.action.ReadValue<Vector2>();
-            return;
-        }
-
-        if (!crouchAction.action.IsPressed())
+        if (groundChecker == null || playerStartPoint == null)
             return;
 
-        Vector2 delta = currentTouchPosition - startTouchPosition;
-        float minSwipeDistance = Screen.width * minSwipeScreenPercent;
+        float deltaTime = Time.deltaTime;
+        bool grounded = Physics.CheckSphere(groundChecker.position, groundCheckerRadius,
+            groundLayer, QueryTriggerInteraction.Ignore);
 
-        if (Mathf.Abs(delta.x) <= minSwipeDistance)
-            return;
+        currentSpeed = Mathf.MoveTowards(currentSpeed, maxSpeed, acceleration * deltaTime);
+        ApplyGravity(grounded, deltaTime);
+        ReadGesture(out bool crouching, out bool released);
+        SetCrouchPose(crouching);
 
-        if (delta.x > 0)
-            ChangeLane(1);
-        else
-            ChangeLane(-1);
+        if (crouching)
+            verticalVelocity = -crouchPullSpeed;
+        else if (released && grounded)
+            Jump();
 
-        startTouchPosition = currentTouchPosition;
+        float targetX = playerStartPoint.position.x + currentLane * laneSwitchDistance;
+        float nextX = Mathf.MoveTowards(transform.position.x, targetX, laneSwitchSpeed * deltaTime);
+        Vector3 displacement = new Vector3(nextX - transform.position.x,
+            verticalVelocity * deltaTime, currentSpeed * deltaTime);
+        playerController.Move(displacement);
     }
 
-    private void ChangeLane(int direcction)
+    private void ApplyGravity(bool grounded, float deltaTime)
     {
-        currentLane = Mathf.Clamp(currentLane + direcction, -1, 1);
-    }
-
-    private void Gravity()
-    {
-        if (isGrounded && verticalVelocity < 0)
-        {
+        if (grounded && verticalVelocity < 0f)
             verticalVelocity = 0f;
+        else
+            verticalVelocity -= gravityForce * deltaTime;
+    }
+
+    private void ReadGesture(out bool crouching, out bool released)
+    {
+        crouching = false;
+        released = false;
+
+        InputAction press = PressAction;
+        InputAction position = PositionAction;
+        if (press == null || position == null || !press.enabled || !position.enabled)
+        {
+            ClearGesture();
             return;
         }
 
-        verticalVelocity -= gravityForce * Time.deltaTime;
+        bool held = press.IsPressed();
+        if (!hasGesture && held && press.WasPressedThisFrame())
+        {
+            bool knownPosition = PointerUiHitTest.TryGetPosition(press, out Vector2 startPosition);
+            if (!knownPosition)
+                startPosition = position.ReadValue<Vector2>();
+
+            if (uiHitTest.IsOverUi(startPosition))
+                return;
+
+            hasGesture = true;
+            swipeOrigin = startPosition;
+            gestureTouch = PointerUiHitTest.FindTouch(press);
+            if (gestureTouch != null)
+                gestureTouchId = gestureTouch.touchId.ReadValue();
+
+            if (AudioManager.Instance != null)
+                AudioManager.Instance.PlayEffect(crouchClip);
+        }
+
+        if (!hasGesture)
+            return;
+
+        if (gestureTouch != null)
+        {
+            var phase = gestureTouch.phase.ReadValue();
+            if (gestureTouch.touchId.ReadValue() != gestureTouchId ||
+                phase == UnityEngine.InputSystem.TouchPhase.Canceled)
+            {
+                ClearGesture();
+                return;
+            }
+
+            if (phase == UnityEngine.InputSystem.TouchPhase.Ended)
+            {
+                released = true;
+                ClearGesture();
+                return;
+            }
+        }
+
+        if (!held)
+        {
+            released = press.WasReleasedThisFrame();
+            ClearGesture();
+            return;
+        }
+
+        crouching = true;
+        Vector2 currentPosition = gestureTouch != null
+            ? gestureTouch.position.ReadValue()
+            : position.ReadValue<Vector2>();
+        float deltaX = currentPosition.x - swipeOrigin.x;
+        if (Mathf.Abs(deltaX) > Screen.width * minSwipeScreenPercent)
+        {
+            currentLane = Mathf.Clamp(currentLane + (deltaX > 0f ? 1 : -1), -1, 1);
+            swipeOrigin = currentPosition;
+        }
+    }
+
+    private void ClearGesture()
+    {
+        hasGesture = false;
+        gestureTouch = null;
     }
 
     private void Jump()
     {
-        if (isGrounded)
-        {
-            verticalVelocity = jumpForce;
+        verticalVelocity = jumpForce;
+        if (AudioManager.Instance != null)
             AudioManager.Instance.PlayEffect(jumpClip);
-        }
-
     }
 
-    private bool IsGrounded()
+    private void SetCrouchPose(bool crouching, bool force = false)
     {
-        return Physics.CheckSphere(groundChecker.position, groundCheckerRadius, groundLayer,
-            QueryTriggerInteraction.Ignore);
+        if (!force && isCrouching == crouching)
+            return;
+
+        isCrouching = crouching;
+        playerController.height = crouching ? 1f : 2f;
+        playerController.center = crouching ? new Vector3(0f, -0.5f, 0f) : Vector3.zero;
+        visuals.SetCrouching(crouching);
     }
 
     private void OnDrawGizmos()
@@ -206,114 +221,42 @@ public class PlayerMovement : MonoBehaviour, IRestartable
         Gizmos.DrawSphere(groundChecker.position, groundCheckerRadius);
     }
 
-    private void Crouch()
-    {
-        bool pressedNow = crouchAction.action.IsPressed();
-
-        if (pressedNow && !pointerHeld)
-        {
-            pointerHeld = true;
-            AudioManager.Instance.PlayEffect(crouchClip);
-        }
-
-        if (pressedNow  && !EventSystem.current.IsPointerOverGameObject())
-        {
-            isCrouching = true;
-
-            playerController.height = 1f;
-            playerController.center = new Vector3(0f, -0.5f, 0f);
-
-            for (int i = 0; i < playerModel.Length; i++)
-            {
-                playerModel[i].SetActive(false);
-                crouchModel[i].SetActive(i==SaveSystem.Instance.GetPlayableSkin());
-            }
-
-            verticalVelocity = -30f;
-        }
-        else
-        {
-            isCrouching = false;
-
-            playerController.height = 2f;
-            playerController.center = Vector3.zero;
-
-            for (int i = 0; i < playerModel.Length; i++)
-            {
-                playerModel[i].SetActive(i==SaveSystem.Instance.GetPlayableSkin());
-                crouchModel[i].SetActive(false);
-            }
-        }
-
-        if (pointerHeld &&
-            !pressedNow &&
-            crouchAction.action.WasReleasedThisFrame())
-        {
-            pointerHeld = false;
-            Jump();
-        }
-    }
-
-    private void CheckLanding()
-    {
-        wasGrounded = isGrounded;
-    }
-
     public void GameOver()
     {
-        for (int i = 0; i < playerModel.Length; i++)
-        {
-            playerModel[i].SetActive(false);
-            crouchModel[i].SetActive(false);
-        }
+        visuals.SetVisible(false);
     }
-    
+
     public void Restart()
     {
+        if (playerStartPoint == null)
+            return;
+
         gameObject.SetActive(true);
         playerController.enabled = false;
-        transform.SetPositionAndRotation(
-            playerStartPoint.position,
-            playerStartPoint.rotation
-        );
+        transform.SetPositionAndRotation(playerStartPoint.position, playerStartPoint.rotation);
+        SetCrouchPose(false, force: true);
         playerController.enabled = true;
 
         currentSpeed = startSpeed;
         currentLane = 0;
         verticalVelocity = 0f;
-        playerController.height = 2f;
-        playerController.center = new Vector3(0f, 0f, 0f);
-        for (int i = 0; i < playerModel.Length; i++)
-        {
-            playerModel[i].SetActive(i==SaveSystem.Instance.GetPlayableSkin());
-            crouchModel[i].SetActive(false);
-        }
-        wasGrounded = true;
+        ClearGesture();
 
-        xMovement = 0f;
-        yMovement = 0f;
-        zMovement = 0f;
-
-        isGrounded = true;
-        isCrouching = false;
-        pointerHeld = false;
-        startTouchPosition = Vector2.zero;
+        Play();
+        visuals.SetVisible(true);
     }
 
     public int GetDistance()
     {
-        return (int)(transform.position.z - playerStartPoint.position.z);
+        if (playerStartPoint == null)
+            return 0;
+
+        return Mathf.Max(0, (int)(transform.position.z - playerStartPoint.position.z));
     }
 
     public void Play()
     {
-        for (int i = 0; i < playerModel.Length; i++)
-        {
-            playerModel[i].SetActive(i==SaveSystem.Instance.GetPlayableSkin());
-            crouchModel[i].SetActive(false);
-        }
+        if (visuals != null)
+            visuals.SetSkin(SaveSystem.Instance != null ? SaveSystem.Instance.GetPlayableSkin() : 0);
     }
-    
 }
-
-   

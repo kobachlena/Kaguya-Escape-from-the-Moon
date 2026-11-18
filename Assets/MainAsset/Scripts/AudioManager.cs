@@ -1,6 +1,5 @@
 using UnityEngine;
 using UnityEngine.Audio;
-using UnityEngine.UI;
 
 public class AudioManager : MonoBehaviour
 {
@@ -12,39 +11,55 @@ public class AudioManager : MonoBehaviour
     public const string MusicVolumeParameter = "MusicVolume";
     public const string SfxVolumeParameter = "SfxVolume";
 
-    private const float minimumVolumeDb = -80f;
+    private const float MinimumVolumeDb = -80f;
 
-    
     [Header("Audio Source")]
     [SerializeField] private AudioSource effectSource;
     [SerializeField] private AudioSource musicSource;
-    
+
     [Header("Audio Mixer")]
     [SerializeField] private AudioMixer masterMixer;
-    
 
-    public static AudioManager Instance{get; private set;}
+    public static AudioManager Instance { get; private set; }
 
-    void Awake()
+    private bool settingsApplied;
+    private bool settingsDirty;
+
+    private void Awake()
     {
-        if (Instance != null &&  Instance != this)
+        if (Instance != null && Instance != this)
         {
             Destroy(gameObject);
             return;
         }
-        
+
         Instance = this;
         DontDestroyOnLoad(gameObject);
     }
-    
 
-    public void PlayEffect( AudioClip effectClip )
+    private void Start()
     {
-        effectSource.PlayOneShot(effectClip);
+        ApplySavedSettings();
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this)
+            Instance = null;
+    }
+
+    public void PlayEffect(AudioClip effectClip)
+    {
+        if (effectSource != null && effectClip != null)
+            effectSource.PlayOneShot(effectClip);
     }
 
     public void PlayMusic(AudioClip musicClip)
     {
+        if (musicSource == null || musicClip == null)
+            return;
+
+        ApplySavedSettings();
         musicSource.clip = musicClip;
         musicSource.loop = true;
         musicSource.spatialBlend = 0f;
@@ -53,34 +68,69 @@ public class AudioManager : MonoBehaviour
 
     public void StopMusic()
     {
-        musicSource.Stop();
+        if (musicSource != null)
+            musicSource.Stop();
     }
-    
-    #region SetVolume
 
-    
-    public void SetVolume( string mixerParameter, string playerPrefsKey, float volume)
+    public float GetVolume(string playerPrefsKey)
+    {
+        return Mathf.Clamp01(PlayerPrefs.GetFloat(playerPrefsKey, 1f));
+    }
+
+    public void SetVolume(string mixerParameter, string playerPrefsKey, float volume)
     {
         volume = Mathf.Clamp01(volume);
-
-        float volumeInDecibels = ConvertToDecibels(volume);
-
-        bool parameterFound = masterMixer.SetFloat(
-            mixerParameter,
-            volumeInDecibels
-        );
+        if (!ApplyVolume(mixerParameter, volume))
+            return;
 
         PlayerPrefs.SetFloat(playerPrefsKey, volume);
+        settingsDirty = true;
     }
 
-    private float ConvertToDecibels(float volume)
+    public void SaveSettings()
     {
-        if (volume <= 0.0001f)
-            return minimumVolumeDb;
+        if (!settingsDirty)
+            return;
 
-        return Mathf.Log10(volume) * 20f;
+        PlayerPrefs.Save();
+        settingsDirty = false;
     }
-    #endregion
-    
-    
+
+    private void ApplySavedSettings()
+    {
+        if (settingsApplied)
+            return;
+
+        settingsApplied = true;
+        ApplyVolume(MasterVolumeParameter, GetVolume(MasterVolumeKey));
+        ApplyVolume(MusicVolumeParameter, GetVolume(MusicVolumeKey));
+        ApplyVolume(SfxVolumeParameter, GetVolume(SfxVolumeKey));
+    }
+
+    private bool ApplyVolume(string mixerParameter, float volume)
+    {
+        float decibels = volume <= 0.0001f ? MinimumVolumeDb : Mathf.Log10(volume) * 20f;
+        if (masterMixer != null && masterMixer.SetFloat(mixerParameter, decibels))
+            return true;
+
+        Debug.LogWarning("AudioMixer parameter is unavailable: " + mixerParameter, this);
+        return false;
+    }
+
+    private void OnApplicationPause(bool paused)
+    {
+        if (paused)
+            SaveSettings();
+    }
+
+    private void OnApplicationFocus(bool hasFocus)
+    {
+        if (!hasFocus)
+            SaveSettings();
+    }
+
+    private void OnApplicationQuit()
+    {
+        SaveSettings();
+    }
 }

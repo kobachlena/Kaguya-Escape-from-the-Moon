@@ -1,4 +1,3 @@
-using System;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -8,6 +7,9 @@ public class MainMenuController : MonoBehaviour
     [SerializeField] private GameObject settingsPanel;
     [SerializeField] private GameObject logoImage;
     [SerializeField] private AudioClip mainMenuMusic;
+    [SerializeField] private int gameSceneBuildIndex = 1;
+
+    private bool isLoadingScene;
 
 
     private void Start()
@@ -15,16 +17,18 @@ public class MainMenuController : MonoBehaviour
         mainPanel.SetActive(true);
         settingsPanel.SetActive(false);
         logoImage.SetActive(true);
-        AudioManager.Instance.PlayMusic(mainMenuMusic);
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.PlayMusic(mainMenuMusic);
     }
 
     public void QuitGame()
     {
-        #if UNITY_EDITOR
-            UnityEditor.EditorApplication.isPlaying = false;
-        #else
-            Application.Quit();
-        #endif
+        PlayerPrefs.Save();
+#if UNITY_EDITOR
+        UnityEditor.EditorApplication.isPlaying = false;
+#else
+        Application.Quit();
+#endif
     }
 
     public void SettingsOn()
@@ -36,6 +40,9 @@ public class MainMenuController : MonoBehaviour
 
     public void SettingsOff()
     {
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.SaveSettings();
+
         mainPanel.SetActive(true);
         settingsPanel.SetActive(false);
         logoImage.SetActive(true);
@@ -43,8 +50,21 @@ public class MainMenuController : MonoBehaviour
 
     public void StartGame()
     {
-        AudioManager.Instance.StopMusic();
-        SceneManager.LoadSceneAsync(1);
+        if (isLoadingScene)
+            return;
+
+        if (gameSceneBuildIndex < 0 || gameSceneBuildIndex >= SceneManager.sceneCountInBuildSettings)
+        {
+            Debug.LogError("Game scene is not in Build Settings at the configured index.", this);
+            return;
+        }
+
+        isLoadingScene = true;
+        Time.timeScale = 1f;
+        if (AudioManager.Instance != null)
+            AudioManager.Instance.StopMusic();
+
+        SceneManager.LoadSceneAsync(gameSceneBuildIndex);
     }
     
     
